@@ -50,7 +50,6 @@
   .r-key .dot { display: inline-block; border-radius: 50%; flex: none; }
   .dot--on { width: 11px; height: 11px; background: var(--blue); }
   .dot--lost { width: 10px; height: 10px; border: 2px solid var(--red); background: transparent; }
-  .dot--never { width: 5px; height: 5px; background: var(--grey-4); }
   .size-key { display: inline-flex; align-items: flex-end; gap: 4px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
@@ -85,7 +84,6 @@
   <div class="r-key" id="key">
     <span><i class="dot dot--on"></i>Servizio attivo</span>
     <span><i class="dot dot--lost"></i>Servizio chiuso (attivo in un anno precedente)</span>
-    <span><i class="dot dot--never"></i>Mai attivo</span>
   </div>
   <p class="r-note">Istat rileva i servizi nei 109 Comuni capoluogo; i conteggi possono differire da quelli dell'Osservatorio nazionale sharing mobility, che usa una metodologia diversa.</p>
 
@@ -168,7 +166,8 @@
       var narrow = R.isNarrow(W);
       if (s === "on") return { s: s, r: Math.max(narrow ? 2.6 : 3, rScale[mode](v)), fill: "var(--blue)", stroke: "var(--bg)", sw: 0.8, op: 0.88 };
       if (s === "lost") return { s: s, r: narrow ? 4 : 5, fill: "none", stroke: "var(--red)", sw: narrow ? 1.6 : 1.8, op: 1 };
-      return { s: s, r: narrow ? 1.6 : 2, fill: "var(--grey-4)", stroke: "none", sw: 0, op: 1 };
+      // mai attivo: non si disegna
+      return { s: s, r: 0, fill: "none", stroke: "none", sw: 0, op: 0 };
     }
     function order(a, b) {
       var A = attrs(a), B = attrs(b), rank = { never: 0, lost: 1, on: 2 };
@@ -191,12 +190,12 @@
       svg.append("g").selectAll("path").data(regioni.features).join("path").attr("class", "reg").attr("d", path);
       gPts = svg.append("g");
       var hit = svg.append("rect").attr("width", W).attr("height", H).style("fill", "transparent");
-      var delaunay = d3.Delaunay.from(cities, function (c) { return c.x; }, function (c) { return c.yy; });
       function pick(ev) {
         var p = d3.pointer(ev, svg.node());
-        var c = cities[delaunay.find(p[0], p[1])];
-        var d = Math.hypot(c.x - p[0], c.yy - p[1]);
-        return d < Math.max(18, attrs(c).r + 8) ? c : null;
+        // solo i capoluoghi visibili (attivi o con servizio chiuso)
+        var best = null, bd = Infinity;
+        cities.forEach(function (c) { if (attrs(c).s === "never") return; var d = Math.hypot(c.x - p[0], c.yy - p[1]); if (d < bd) { bd = d; best = c; } });
+        return best && bd < Math.max(18, attrs(best).r + 8) ? best : null;
       }
       hit.on("pointermove pointerdown", function (ev) {
         var c = pick(ev);

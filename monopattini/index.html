@@ -134,23 +134,6 @@
       defs.append("clipPath").attr("id", uid + "a").append("rect").attr("x", -10).attr("y", -m.top).attr("width", cut + 10).attr("height", H);
       defs.append("clipPath").attr("id", uid + "b").append("rect").attr("x", cut).attr("y", -m.top).attr("width", w - cut + 20).attr("height", H);
 
-      // annotazione (una sola): servizi 2023
-      var aPt = SERIES[2].pts.find(function (p) { return p.d.anno === 2023; });
-      var an = g.append("g").attr("class", "anno");
-      var ax = x(aPt.date), ay = y(aPt.idx);
-      var tx = 0, tw = narrow ? Math.min(w - 40, 190) : Math.min(260, ax + 40);
-      var ty = h - 10;                               // ultima riga appena sopra l'asse
-      var at = an.append("text").attr("x", tx).attr("y", ty)
-        .text("Dal 2023 i bandi di Roma e Milano riducono il numero di operatori ammessi").call(R.wrap, tw);
-      var nl = +at.attr("data-lines") || 1;
-      var fs = 13 * 1.35;
-      at.attr("transform", "translate(0," + (-(nl - 1) * fs) + ")");
-      var top = ty - (nl - 1) * fs - fs + 2;
-      // il testo sta sotto le linee: la linea d'aggancio sale dal testo al punto
-      an.append("path").attr("d", "M" + ax + "," + top + "V" + (ay + 4));
-      an.append("circle").attr("cx", ax).attr("cy", ay).attr("r", 1.75);
-      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
-
       var line = d3.line().curve(d3.curveMonotoneX).x(function (p) { return x(p.date); }).y(function (p) { return y(p.idx); });
       var marks = [];
       SERIES.slice().reverse().forEach(function (s) {
