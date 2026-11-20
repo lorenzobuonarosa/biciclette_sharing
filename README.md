@@ -9,7 +9,7 @@ Indirizzo base previsto: `https://lorenzobuonarosa.github.io/biciclette_sharing/
 | `monopattini/` | Più corse in monopattino, con meno mezzi e meno servizi (linee, numero indice 2022 = 100) | `data/monopattini.csv` | 750 |
 | `capoluoghi/` | Il monopattino in sharing nei capoluoghi (mappa a punti con slider 2020–2024, vista Monopattini/Bici) | `data/capoluoghi.csv`, `data/regioni.json` | 1075 |
 | `capitali/` | I capitali per la micromobilità sono quasi spariti (barre impilate) | `data/capitali.csv` | 725 |
-| `rotazione/` | Corse al giorno per mezzo in sharing, 2024 (barre orizzontali) | `data/rotazione.csv` | 690 |
+| `rotazione/` | Corse al giorno per mezzo in sharing, 2024 (barre orizzontali) | `data/rotazione.csv` | 595 |
 
 Per aggiornare un grafico basta cambiare il CSV: titoli calcolati, big number, contatori e frasi che dipendono dai dati si ricalcolano.
 
@@ -42,7 +42,7 @@ Istat, Dati ambientali nelle città – tavole "Mobilità urbana". Colonne: `cap
 Via ID-Dealroom, State of European Mobility Startups 2025, in Osservatorio nazionale sharing mobility, 9° Rapporto. Valori letti dal grafico del Rapporto (senza tabella), approssimati al decimo. Big number: micromobilità 2024 / picco (2021) − 1 = −87%.
 
 ### `data/rotazione.csv`
-Italia: tassi di rotazione pubblicati dall'Osservatorio (9° Rapporto, p65 e p72). Parigi, Barcellona, Madrid: elaborazione Radar – QN, noleggi annui / flotta / 366 giorni (Agemob; BSM e AMB; Ayuntamiento de Madrid). Berlino: media dei quattro trimestri 2024 (Senatsverwaltung für Mobilität Berlin). Il campo `fonte` di Barcellona contiene un `;` ed è tra virgolette.
+Italia: tassi di rotazione pubblicati dall'Osservatorio (9° Rapporto, p65 e p72). Parigi, Barcellona, Madrid: elaborazione Radar – QN, noleggi annui / flotta / 366 giorni (Agemob; BSM e AMB; Ayuntamiento de Madrid). Berlino e le bici italiane a flusso libero, presenti nella prima versione, sono stati tolti. Il campo `fonte` di Barcellona contiene un `;` ed è tra virgolette.
 
 ## Snippet per il CMS
 

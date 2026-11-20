@@ -20,16 +20,16 @@
 <body>
 <main class="radar">
   <header>
-    <h1 class="r-title" id="title">Le bici pubbliche di Parigi e Barcellona si usano più di quattro volte tanto i monopattini in sharing italiani</h1>
+    <h1 class="r-title" id="title">Le bici pubbliche di Parigi e Barcellona si usano quattro volte in più rispetto ai monopattini in sharing italiani</h1>
     <p class="r-sub">Corse al giorno per mezzo in sharing, 2024</p>
   </header>
 
   <figure class="r-chart" id="chart"></figure>
   <div class="r-key"><span><i class="sw sw--range"></i>Intervallo: la flotta di Barcellona varia nell'anno</span></div>
-  <p class="r-note">I sistemi non sono omogenei: bici a stazioni e mezzi a flusso libero hanno usi diversi. Per Berlino media dei quattro trimestri 2024.</p>
+  <p class="r-note">I sistemi non sono omogenei: bici a stazioni e mezzi a flusso libero hanno usi diversi.</p>
 
   <footer class="r-foot">
-    <span>Fonte: Osservatorio nazionale sharing mobility (Italia); Agemob (Parigi); BSM e AMB (Barcellona); Ayuntamiento de Madrid; Senatsverwaltung für Mobilität Berlin. Elaborazione Radar – QN per Parigi, Barcellona e Madrid (noleggi annui / flotta / 366 giorni)</span>
+    <span>Fonte: Osservatorio nazionale sharing mobility (Italia); Agemob (Parigi); BSM e AMB (Barcellona); Ayuntamiento de Madrid. Elaborazione Radar – QN per Parigi, Barcellona e Madrid (noleggi annui / flotta / 366 giorni)</span>
     <span>Elaborazione Radar – QN</span>
   </footer>
 </main>
@@ -60,8 +60,8 @@
     var bcn = data.find(function (d) { return /^Barcellona/.test(d.voce); });
     var ratio = Math.min(par.v, bcn.v) / focus.v;
     var n = Math.floor(ratio);
-    var formula = (ratio > n + 0.05 ? "più di " : "") + NUM[n] + " volte tanto";
-    d3.select("#title").text("Le bici pubbliche di Parigi e Barcellona si usano " + formula + " i monopattini in sharing italiani");
+    // numero calcolato: parte intera del rapporto (oggi 4,3 per Parigi, 4,4 per Barcellona)
+    d3.select("#title").text("Le bici pubbliche di Parigi e Barcellona si usano " + NUM[n] + " volte in più rispetto ai monopattini in sharing italiani");
 
     var host = document.getElementById("chart");
     var tip = R.tooltip(host);
