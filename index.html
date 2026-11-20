@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharing di bici e monopattini – Dataviz Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="assets/radar.css">
+<style>
+  .idx { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  .idx h1 { font: 700 32px/1.1 var(--serif); margin: 0 0 6px; color: var(--title); }
+  .idx > p { color: var(--ink-2); font-size: 14px; margin: 0 0 28px; }
+  .item { border-top: 1px solid var(--rule); padding: 24px 0 8px; }
+  .item h2 { font: 700 22px/1.2 var(--serif); margin: 0 0 4px; }
+  .item h2 a { color: inherit; text-decoration: none; }
+  .item .url { font-size: 13px; color: var(--ink-2); margin: 0 0 14px; word-break: break-all; }
+  .prev { display: flex; gap: 24px; align-items: flex-start; overflow-x: auto; }
+  .prev figure { margin: 0; flex: none; }
+  .prev figcaption { font-size: 12px; color: var(--ink-2); margin-bottom: 6px; }
+  .prev iframe { border: 1px solid var(--rule); display: block; }
+  .snip { position: relative; margin-top: 16px; }
+  .snip textarea { width: 100%; height: 110px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink); background: var(--tip-bg); border: 1px solid var(--rule); padding: 10px; resize: vertical; }
+  .snip button { position: absolute; top: 8px; right: 8px; font: 600 12px var(--sans); padding: 6px 12px; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); border-radius: 3px; cursor: pointer; }
+  @media (max-width: 900px) { .prev .desk { display: none; } }
+</style>
+</head>
+<body>
+<div class="idx">
+  <h1>Sharing di bici e monopattini</h1>
+  <p>Quattro dataviz per Radar – QN. Anteprima desktop (760px) e mobile (360px), con lo snippet pronto per il CMS (iframe + script, già con l'account).</p>
+  <div id="list"></div>
+</div>
+<script>
+(function () {
+  var BASE = "https://lorenzobuonarosa.github.io/biciclette_sharing/";
+  var ITEMS = [
+    { slug: "monopattini", title: "Più corse in monopattino, con meno mezzi e meno servizi", h: 750 },
+    { slug: "capoluoghi", title: "I capoluoghi che perdono lo sharing (mappa)", h: 1075 },
+    { slug: "capitali", title: "I capitali per la micromobilità sono quasi spariti", h: 725 },
+    { slug: "rotazione", title: "Quante volte al giorno si usa un mezzo in sharing", h: 690 }
+  ];
+  fetch("assets/embed.min.js").then(function (r) { return r.text(); }).then(function (js) {
+    js = js.trim();
+    var list = document.getElementById("list");
+    ITEMS.forEach(function (it) {
+      var url = BASE + it.slug + "/";
+      var snippet = '<iframe src="' + url + '" width="100%" height="' + it.h + '" frameborder="0" scrolling="no" title="' + it.title.replace(/"/g, "&quot;") + '"></iframe>\n<script>\n' + js + "\n<\/script>";
+      var el = document.createElement("section");
+      el.className = "item";
+      el.innerHTML = '<h2><a href="' + it.slug + '/">' + it.title + '</a></h2><p class="url">' + url + '</p>' +
+        '<div class="prev"><figure class="desk"><figcaption>Desktop</figcaption><iframe src="' + it.slug + '/" width="760" height="' + it.h + '" scrolling="no" title="Anteprima desktop"></iframe></figure>' +
+        '<figure><figcaption>Mobile</figcaption><iframe src="' + it.slug + '/" width="360" height="' + Math.round(it.h * 1.25) + '" scrolling="no" title="Anteprima mobile"></iframe></figure></div>' +
+        '<div class="snip"><textarea readonly></textarea><button type="button">Copia</button></div>';
+      el.querySelector("textarea").value = snippet;
+      el.querySelector("button").addEventListener("click", function () {
+        var b = this, ta = el.querySelector("textarea");
+        (navigator.clipboard ? navigator.clipboard.writeText(snippet) : Promise.reject()).catch(function () { ta.select(); document.execCommand("copy"); })
+          .then(function () { b.textContent = "Copiato"; setTimeout(function () { b.textContent = "Copia"; }, 1500); });
+      });
+      list.appendChild(el);
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Venture capital nella mobilità in Europa – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">I capitali per la micromobilità sono quasi spariti</h1>
+    <p class="r-sub">Investimenti di venture capital nelle start-up europee della mobilità, miliardi di euro, valori approssimati</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="chart">
+    <div class="r-key" id="key" style="margin:0 0 8px"></div>
+  </figure>
+  <p class="r-note">Valori letti dal grafico del Rapporto, che riporta il dato di Via ID-Dealroom senza tabella: approssimati al decimo.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Via ID-Dealroom, State of European Mobility Startups 2025, in Osservatorio nazionale sharing mobility, 9° Rapporto</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var f1 = function (v) { return fmt(v, 1); };
+  // dal basso verso l'alto: la micromobilità alla base
+  var SEG = [
+    { k: "micromobilita", label: "Micromobilità", color: "var(--red)", ink: "var(--red)" },
+    { k: "ev_batterie_ricarica", label: "EV, batterie e ricarica", color: "var(--blue)", ink: "var(--blue)" },
+    { k: "resto_mobilita", label: "Resto della mobilità", color: "var(--grey-4)", ink: "var(--ink-2)" }
+  ];
+  var NOTE = "Valore letto dal grafico, approssimato al decimo.";
+
+  R.loadCSV("../data/capitali.csv").then(function (rows) {
+    var data = rows.map(function (r) {
+      var d = { anno: r.anno };
+      var acc = 0;
+      d.segs = SEG.map(function (s) { var v = R.num(r[s.k]); var o = { s: s, d: d, v: v, y0: acc, y1: acc + v }; acc += v; return o; });
+      d.tot = acc;
+      SEG.forEach(function (s, i) { d[s.k] = d.segs[i].v; });
+      return d;
+    });
+    var last = data[data.length - 1];
+    var peak = data.reduce(function (a, b) { return b.micromobilita > a.micromobilita ? b : a; });
+    var drop = last.micromobilita / peak.micromobilita - 1;
+
+    // ---- Big number ----
+    var bigNum = d3.select("#big-num");
+    var bf = function (v) { return (v < 0 ? "−" : "+") + fmt(Math.abs(v), 0) + "%"; };
+    d3.select("#big-label").text("gli investimenti in micromobilità dal picco del " + peak.anno);
+    if (R.reduced) bigNum.text(bf(drop * 100));
+    else { bigNum.text(bf(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, drop * 100, bf, "play"); }); }
+
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+    var segs = [];
+    data.forEach(function (d) { segs = segs.concat(d.segs); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      d3.select("#key").html(narrow ? SEG.map(function (s) {
+        return '<span><i class="sw" style="background:' + s.color + '"></i>' + s.label + "</span>";
+      }).join("") : "").style("display", narrow ? null : "none");
+
+      var m = { top: narrow ? 70 : 54, right: narrow ? 0 : 150, bottom: 28, left: narrow ? 24 : 30 };
+      var H = narrow ? 340 : 390;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+      var x = d3.scaleBand().domain(data.map(function (d) { return d.anno; })).range([0, w]).paddingInner(narrow ? 0.24 : 0.32).paddingOuter(0.05);
+      var y = d3.scaleLinear().domain([0, d3.max(data, function (d) { return d.tot; })]).nice().range([h, 0]);
+      var ticks = y.ticks(narrow ? 3 : 4);
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre impilate: gli investimenti di venture capital nelle start-up europee della micromobilità passano da circa " +
+          f1(peak.micromobilita) + " miliardi di euro nel " + peak.anno + " a circa " + f1(last.micromobilita) + " miliardi nel " + last.anno +
+          ", un calo di circa il " + fmt(Math.abs(drop * 100), 0) + "%. Valori approssimati.");
+      svg.append("title").text("Investimenti di venture capital nelle start-up europee della mobilità per segmento, miliardi di euro");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+        .attr("x1", -m.left).attr("x2", w)
+        .attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; })
+        .attr("class", function (d) { return d === 0 ? "baseline" : null; });
+      g.append("g").selectAll("text").data(ticks.filter(function (t) { return t > 0; })).join("text").attr("class", "tick-label")
+        .attr("x", -m.left).attr("y", function (d) { return y(d) - 5; })
+        .text(function (d, i, a) { return fmt(d, 0) + (i === a.length - 1 ? " mld €" : ""); });
+
+      var GAP = 2;
+      function segPath(q, t) {
+        // segmenti impilati: crescono uno dopo l'altro; 2px di spazio tra i segmenti
+        var i = SEG.indexOf(q.s), n = SEG.length;
+        var tt = Math.max(0, Math.min(1, t * n - i));
+        var top = y(q.y0 + (q.y1 - q.y0) * tt), bot = y(q.y0) - (i > 0 ? GAP : 0);
+        var hh = Math.max(0, bot - top);
+        if (tt === 0 || hh === 0) return "M0,0";
+        var isTop = i === n - 1;
+        var bx = x(q.d.anno), bw = x.bandwidth();
+        return isTop ? R.barPathV(bx, top, bw, hh, 2) : "M" + bx + "," + bot + "V" + top + "H" + (bx + bw) + "V" + bot + "Z";
+      }
+      var bars = g.append("g").selectAll("path").data(segs).join("path").attr("class", "mark")
+        .style("fill", function (q) { return q.s.color; });
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (q) { return segPath(q, 0); }); },
+        function (s) { s.attrTween("d", function (q) { return function (t) { return segPath(q, t); }; }); });
+
+      // totali sopra le barre, un decimale
+      var tots = g.append("g").selectAll("text").data(data).join("text")
+        .attr("class", "val-label mark").attr("text-anchor", "middle")
+        .style("font-size", narrow ? "11px" : null)
+        .attr("x", function (d) { return x(d.anno) + x.bandwidth() / 2; }).attr("y", function (d) { return y(d.tot) - 6; });
+      tots.each(function (d) { R.countUp(d3.select(this), d.tot, f1, phase); });
+
+      g.append("g").selectAll("text").data(data).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+        .attr("x", function (d) { return x(d.anno) + x.bandwidth() / 2; }).attr("y", h + 18)
+        .text(function (d) { return narrow ? "’" + d.anno.slice(2) : d.anno; });
+
+      // etichette dirette sui segmenti dell'ultima barra (desktop)
+      if (!narrow) {
+        var lx = x(last.anno) + x.bandwidth() + 10;
+        var ly = last.segs.map(function (q) { return y((q.y0 + q.y1) / 2); });
+        // anti-collisione: la micromobilità (segmento sottile) resta alla base
+        for (var i = 1; i < ly.length; i++) if (ly[i - 1] - ly[i] < 30) ly[i] = ly[i - 1] - 30;
+        var dl = g.append("g");
+        last.segs.forEach(function (q, i) {
+          var t = dl.append("text").attr("class", "series-label").attr("x", lx).attr("y", ly[i]).attr("dy", "-0.1em").style("fill", q.s.ink);
+          t.text(q.s.label);
+          dl.append("text").attr("class", "series-label--sub").attr("x", lx).attr("y", ly[i]).attr("dy", "1.15em").text(f1(q.v) + " mld €");
+        });
+        R.enter(dl, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.8);
+      }
+
+      // annotazione (una sola): 2022
+      var a = data.find(function (d) { return d.anno === "2022"; });
+      var an = g.append("g").attr("class", "anno");
+      var px = x(a.anno) + x.bandwidth() / 2, py = y(a.tot) - 20;
+      var TXT = "Tassi di interesse in aumento: i fondi diventano più selettivi";
+      var at, tb;
+      if (narrow) {
+        // su mobile il testo sta a sinistra, sopra le barre basse degli anni precedenti
+        var tEnd = x(data[data.indexOf(a) - 1].anno) - 6;
+        at = an.append("text").attr("x", 0).attr("y", -m.top + 14).text(TXT).call(R.wrap, tEnd);
+        var maxW = 0; at.selectAll("tspan").each(function () { maxW = Math.max(maxW, this.getComputedTextLength()); });
+        at.attr("text-anchor", "end").selectAll("tspan").attr("x", tEnd);
+        tb = at.node().getBBox();
+        an.append("path").attr("d", "M" + (tEnd + 4) + "," + (tb.y + 9) + "H" + px + "V" + py);
+      } else {
+        var txStart = x(a.anno) + x.bandwidth() + 10;
+        at = an.append("text").attr("x", txStart).attr("y", -m.top + 14).text(TXT).call(R.wrap, x(last.anno) + x.bandwidth() - txStart);
+        tb = at.node().getBBox();
+        an.append("path").attr("d", "M" + (txStart - 4) + "," + (tb.y + 9) + "H" + px + "V" + py);
+      }
+      an.append("circle").attr("cx", px).attr("cy", py).attr("r", 1.75);
+      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
+
+      // interazione
+      clear = function () { bars.classed("is-dimmed", false); tots.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(segs).join("rect").attr("class", "hit")
+        .attr("x", function (q) { return x(q.d.anno) - x.step() * x.paddingInner() / 2; }).attr("width", x.step())
+        .attr("y", function (q, i) { var j = SEG.indexOf(q.s); return j === SEG.length - 1 ? -m.top : y(q.y1); })
+        .attr("height", function (q) { var j = SEG.indexOf(q.s); return (j === 0 ? h + m.bottom : y(q.y0)) - (j === SEG.length - 1 ? -m.top : y(q.y1)); })
+        .on("pointerenter pointerdown", function (ev, q) {
+          bars.classed("is-dimmed", function (s) { return s !== q; });
+          tots.classed("is-dimmed", function (d) { return d !== q.d; });
+          tip.show(R.tipHTML({
+            title: q.s.label + ", " + q.d.anno,
+            value: f1(q.v), unit: "miliardi di euro",
+            rows: [["Totale dell'anno", f1(q.d.tot) + " mld €"], ["Quota del segmento", fmt(q.v / q.d.tot * 100, 0) + "%"]],
+            note: NOTE
+          }), x(q.d.anno) + x.bandwidth() / 2 + m.left, y((q.y0 + q.y1) / 2) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corse al giorno per mezzo in sharing – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .grp-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; fill: var(--ink-2); }
+  .bar-label { font-size: 13px; fill: var(--ink); }
+  .r-tip { max-width: 260px; }
+  .sw--range { background: var(--blue-light); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title" id="title">Le bici pubbliche di Parigi e Barcellona si usano più di quattro volte tanto i monopattini in sharing italiani</h1>
+    <p class="r-sub">Corse al giorno per mezzo in sharing, 2024</p>
+  </header>
+
+  <figure class="r-chart" id="chart"></figure>
+  <div class="r-key"><span><i class="sw sw--range"></i>Intervallo: la flotta di Barcellona varia nell'anno</span></div>
+  <p class="r-note">I sistemi non sono omogenei: bici a stazioni e mezzi a flusso libero hanno usi diversi. Per Berlino media dei quattro trimestri 2024.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Osservatorio nazionale sharing mobility (Italia); Agemob (Parigi); BSM e AMB (Barcellona); Ayuntamiento de Madrid; Senatsverwaltung für Mobilität Berlin. Elaborazione Radar – QN per Parigi, Barcellona e Madrid (noleggi annui / flotta / 366 giorni)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt, f1 = function (v) { return fmt(v, 1); };
+  var NUM = ["zero", "una", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci"];
+
+  R.loadCSV("../data/rotazione.csv").then(function (rows) {
+    var data = rows.map(function (r, i) {
+      return { voce: r.voce, gruppo: r.gruppo, v: R.num(r.corse_giorno), min: R.num(r.min), max: R.num(r.max), calcolo: r.calcolo, fonte: r.fonte, i: i };
+    });
+    var groups = [];
+    data.forEach(function (d) { if (groups.indexOf(d.gruppo) < 0) groups.push(d.gruppo); });
+    // ordine dal valore più alto dentro ogni gruppo (a parità, l'ordine del CSV)
+    var ordered = [];
+    groups.forEach(function (gname) {
+      ordered = ordered.concat(data.filter(function (d) { return d.gruppo === gname; })
+        .sort(function (a, b) { return b.v - a.v || a.i - b.i; }));
+    });
+    function isIT(d) { return /^Italia/.test(d.voce); }
+    var focus = data.find(function (d) { return /^Italia/.test(d.voce) && /monopattini/i.test(d.voce); });
+    function color(d) { return d === focus ? "var(--red)" : isIT(d) ? "var(--grey-dark)" : "var(--blue)"; }
+
+    // controllo del titolo sui dati: Parigi e Barcellona contro i monopattini italiani
+    var par = data.find(function (d) { return /^Parigi/.test(d.voce); });
+    var bcn = data.find(function (d) { return /^Barcellona/.test(d.voce); });
+    var ratio = Math.min(par.v, bcn.v) / focus.v;
+    var n = Math.floor(ratio);
+    var formula = (ratio > n + 0.05 ? "più di " : "") + NUM[n] + " volte tanto";
+    d3.select("#title").text("Le bici pubbliche di Parigi e Barcellona si usano " + formula + " i monopattini in sharing italiani");
+
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clear = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clear(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var labW = narrow ? 0 : 200;           // su mobile l'etichetta va sopra la barra
+      var bh = narrow ? 16 : 20, row = narrow ? 44 : 32, gHead = narrow ? 30 : 34, gGap = 16;
+      var m = { top: 0, right: narrow ? 74 : 104, left: labW };
+      var w = W - m.left - m.right;
+      var maxV = d3.max(data, function (d) { return d.max || d.v; });
+      var x = d3.scaleLinear().domain([0, maxV]).range([0, w]);
+
+      // posizioni verticali
+      var yPos = new Map(), gPos = [], yy = 0;
+      groups.forEach(function (gname, gi) {
+        if (gi) yy += gGap;
+        gPos.push({ name: gname, y: yy });
+        yy += gHead;
+        ordered.filter(function (d) { return d.gruppo === gname; }).forEach(function (d) {
+          yPos.set(d, yy + (narrow ? 18 : (row - bh) / 2));
+          yy += row;
+        });
+      });
+      var H = yy + 4;
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a barre: corse al giorno per mezzo in sharing nel 2024. " +
+          ordered.map(function (d) { return d.voce + " " + f1(d.v); }).join("; ") + ".");
+      svg.append("title").text("Corse al giorno per mezzo in sharing, 2024");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      // etichette dei gruppi
+      g.append("g").selectAll("text").data(gPos).join("text").attr("class", "grp-label")
+        .attr("x", -labW).attr("y", function (p) { return p.y + 14; }).text(function (p) { return p.name; });
+      g.append("g").selectAll("line").data(gPos).join("line").attr("class", "grid")
+        .attr("x1", -labW).attr("x2", w + m.right).attr("y1", function (p) { return p.y + 21.5; }).attr("y2", function (p) { return p.y + 21.5; })
+        .style("stroke", "var(--rule)");
+
+      // etichette delle voci
+      g.append("g").selectAll("text").data(ordered).join("text").attr("class", "bar-label")
+        .attr("x", narrow ? 0 : -labW)
+        .attr("y", function (d) { return narrow ? yPos.get(d) - 6 : yPos.get(d) + bh / 2; })
+        .attr("dy", narrow ? 0 : "0.35em")
+        .style("font-weight", function (d) { return d === focus ? 600 : null; })
+        .style("fill", function (d) { return d === focus ? "var(--red)" : null; })
+        .text(function (d) { return d.voce; });
+
+      // barre (per l'intervallo: pieno fino al minimo, più chiaro fino al massimo)
+      // barra: piena fino al valore; per un intervallo piena fino al minimo (lato destro dritto,
+      // prosegue nel tratto più chiaro fino al massimo)
+      function barD(d, t) {
+        if (d.min != null) { var ww = x(d.min) * t; return "M0," + yPos.get(d) + "h" + ww + "v" + bh + "h" + (-ww) + "Z"; }
+        return R.barPathH(0, yPos.get(d), x(d.v) * t, bh, 2);
+      }
+      var bars = g.append("g").selectAll("path").data(ordered).join("path").attr("class", "mark").style("fill", color);
+      R.enter(bars, phase,
+        function (s) { s.attr("d", function (d) { return barD(d, 0); }); },
+        function (s) { s.attrTween("d", function (d) { return function (t) { return barD(d, t); }; }); });
+      var rng = ordered.filter(function (d) { return d.min != null; });
+      var rangeBars = g.append("g").selectAll("path").data(rng).join("path").attr("class", "mark")
+        .style("fill", "var(--blue-light)")
+        .attr("d", function (d) { return R.barPathH(x(d.min), yPos.get(d), x(d.max) - x(d.min), bh, 2); });
+      R.enter(rangeBars, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.8);
+      // segno del valore centrale nell'intervallo
+      var ticks = g.append("g").selectAll("line").data(rng).join("line").attr("class", "mark")
+        .attr("x1", function (d) { return x(d.v); }).attr("x2", function (d) { return x(d.v); })
+        .attr("y1", function (d) { return yPos.get(d) - 3; }).attr("y2", function (d) { return yPos.get(d) + bh + 3; })
+        .style("stroke", "var(--ink)").attr("stroke-width", 1.5);
+      R.enter(ticks, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.8);
+
+      // valori diretti
+      var vals = g.append("g").selectAll("text").data(ordered).join("text").attr("class", "val-label mark")
+        .attr("x", function (d) { return x(d.max || d.v) + 6; }).attr("y", function (d) { return yPos.get(d) + bh / 2; }).attr("dy", "0.35em")
+        .style("fill", function (d) { return d === focus ? "var(--red)" : null; })
+        .style("font-size", "13px");
+      vals.each(function (d) { R.countUp(d3.select(this), d.v, f1, phase); });
+      // intervallo accanto al valore (desktop), dopo l'animazione
+      var rlab = g.append("g").selectAll("text").data(narrow ? [] : rng).join("text").attr("class", "val-label val-label--muted mark")
+        .attr("x", function (d) { return x(d.max) + 34; }).attr("y", function (d) { return yPos.get(d) + bh / 2; }).attr("dy", "0.35em")
+        .text(function (d) { return "(" + f1(d.min) + "–" + f1(d.max) + ")"; });
+      R.enter(rlab, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR);
+
+      // interazione
+      clear = function () { rlab.classed("is-dimmed", false); bars.classed("is-dimmed", false); rangeBars.classed("is-dimmed", false); vals.classed("is-dimmed", false); ticks.classed("is-dimmed", false); };
+      g.append("g").selectAll("rect").data(ordered).join("rect").attr("class", "hit")
+        .attr("x", -labW).attr("width", W)
+        .attr("y", function (d) { return yPos.get(d) - (narrow ? 18 : (row - bh) / 2); }).attr("height", row)
+        .on("pointerenter pointerdown", function (ev, d) {
+          bars.classed("is-dimmed", function (q) { return q !== d; });
+          rangeBars.classed("is-dimmed", function (q) { return q !== d; });
+          ticks.classed("is-dimmed", function (q) { return q !== d; });
+          vals.classed("is-dimmed", function (q) { return q !== d; });
+          rlab.classed("is-dimmed", function (q) { return q !== d; });
+          var rows = [["Gruppo", d.gruppo]];
+          if (d.min != null) rows.push(["Intervallo", f1(d.min) + "–" + f1(d.max)]);
+          tip.show(R.tipHTML({
+            title: d.voce, value: f1(d.v), unit: "corse al giorno per mezzo",
+            rows: rows,
+            note: "Calcolo: " + d.calcolo + (/^Italia|^Berlino/.test(d.voce) ? "." : "; corse annue / flotta / 366 giorni.") +
+              (d.min != null ? " L'intervallo dipende dalla flotta, che nel 2024 varia tra il minimo e il massimo indicati." : "") +
+              "<br>Fonte: " + d.fonte
+          }), Math.min(x(d.max || d.v) + m.left, W - 40), yPos.get(d) + m.top);
+        })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clear(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>

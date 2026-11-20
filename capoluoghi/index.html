@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sharing nei capoluoghi – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .ctrl { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+  .seg button {
+    font: 600 13px/1 var(--sans); color: var(--ink-2); background: var(--bg); border: 0; padding: 9px 14px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--rule); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .seg button:focus-visible, .play:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  .count { font-size: 14px; line-height: 1.45; color: var(--ink-2); margin: 14px 0 0; font-variant-numeric: tabular-nums; }
+  .count b { color: var(--ink); font-size: 18px; font-weight: 700; }
+  .count .down { color: var(--ink-2); white-space: nowrap; }
+  .count .lost b { color: var(--red); }
+  .count > span { display: inline-block; margin-right: 14px; }
+
+  .map-wrap { position: relative; margin-top: 8px; }
+  .map-wrap svg { display: block; overflow: visible; touch-action: manipulation; }
+  .reg { fill: var(--grey-5); stroke: var(--bg); stroke-width: 0.8; }
+  :root[data-theme="dark"] .reg { fill: #1f2224; }
+  :root[data-bg="notte"] .reg { fill: #12212a; }
+  .pt { transition: opacity 180ms ease; }
+
+  .timeline { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .play {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--rule); background: var(--bg); color: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  }
+  .play svg { width: 14px; height: 14px; fill: currentColor; }
+  .slider { flex: 1 1 auto; min-width: 0; }
+  .slider input { width: 100%; margin: 0; height: 40px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+  .slider input::-webkit-slider-runnable-track { height: 3px; background: var(--rule); border-radius: 2px; }
+  .slider input::-moz-range-track { height: 3px; background: var(--rule); border-radius: 2px; }
+  .slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); border: 3px solid var(--bg); margin-top: -11.5px; box-shadow: 0 0 0 1px var(--ink); }
+  .slider input::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--ink); }
+  .ticks { position: relative; height: 18px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .ticks span { position: absolute; top: 0; transform: translateX(-50%); cursor: pointer; padding: 0 4px; }
+  .ticks span.on { color: var(--ink); font-weight: 700; }
+
+  .r-key .dot { display: inline-block; border-radius: 50%; flex: none; }
+  .dot--on { width: 11px; height: 11px; background: var(--blue); }
+  .dot--lost { width: 10px; height: 10px; border: 2px solid var(--red); background: transparent; }
+  .dot--never { width: 5px; height: 5px; background: var(--grey-4); }
+  .size-key { display: inline-flex; align-items: flex-end; gap: 4px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title" id="title">&nbsp;</h1>
+    <p class="r-sub">Comuni capoluogo con un servizio di sharing attivo, per anno. Più grande il punto, più mezzi per abitante</p>
+  </header>
+
+  <div class="ctrl">
+    <div class="seg" role="group" aria-label="Tipo di servizio">
+      <button type="button" data-mode="monopattini" aria-pressed="true">Monopattini</button>
+      <button type="button" data-mode="bici" aria-pressed="false">Bici</button>
+    </div>
+  </div>
+  <p class="count" id="count" aria-live="polite"></p>
+
+  <figure class="r-chart map-wrap" id="map" style="margin-top:4px"></figure>
+
+  <div class="timeline">
+    <button type="button" class="play" id="play" aria-label="Scorri gli anni"><svg viewBox="0 0 14 14" id="play-ico"><path d="M2 1l11 6-11 6z"/></svg></button>
+    <div class="slider">
+      <input type="range" id="year" min="0" max="4" step="1" value="0" aria-label="Anno">
+      <div class="ticks" id="ticks"></div>
+    </div>
+  </div>
+
+  <div class="r-key" id="key">
+    <span><i class="dot dot--on"></i>Servizio attivo</span>
+    <span><i class="dot dot--lost"></i>Servizio chiuso (attivo in un anno precedente)</span>
+    <span><i class="dot dot--never"></i>Mai attivo</span>
+  </div>
+  <p class="r-note">Istat rileva i servizi nei 109 Comuni capoluogo; i conteggi possono differire da quelli dell'Osservatorio nazionale sharing mobility, che usa una metodologia diversa.</p>
+
+  <footer class="r-foot">
+    <span>Fonte: Istat, Dati ambientali nelle città (Ambiente urbano – Anno 2024)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var MODES = {
+    monopattini: { k: "monopattini", k10: "monopattini_10k", what: "monopattini in sharing", mezzi: "monopattini", tip: "Monopattini in sharing" },
+    bici: { k: "bici", k10: "bici_10k", what: "bike sharing", mezzi: "bici", tip: "Bike sharing" }
+  };
+  var mode = "monopattini";
+
+  Promise.all([R.loadCSV("../data/capoluoghi.csv"), fetch("../data/regioni.json").then(function (r) { return r.json(); })]).then(function (res) {
+    var rows = res[0], topo = res[1];
+    var regioni = topojson.feature(topo, topo.objects[Object.keys(topo.objects)[0]]);
+    var years = Array.from(new Set(rows.map(function (r) { return +r.anno; }))).sort();
+    var cities = new Map();
+    rows.forEach(function (r) {
+      var c = cities.get(r.capoluogo);
+      if (!c) { c = { name: r.capoluogo, reg: r.regione, lat: R.num(r.lat), lon: R.num(r.lon), y: {} }; cities.set(r.capoluogo, c); }
+      c.y[+r.anno] = { monopattini: +r.monopattini, bici: +r.bici, monopattini_10k: R.num(r.monopattini_10k), bici_10k: R.num(r.bici_10k) };
+    });
+    cities = Array.from(cities.values());
+    var first = years[0], last = years[years.length - 1];
+
+    // stato di ogni capoluogo per modo e anno: "on" | "lost" | "never"
+    function state(c, md, yr) {
+      var k = MODES[md].k;
+      if (c.y[yr][k]) return "on";
+      for (var y = first; y < yr; y++) if (c.y[y][k]) return "lost";
+      return "never";
+    }
+    function stats(md, yr) {
+      var on = 0, lost = 0;
+      cities.forEach(function (c) { var s = state(c, md, yr); if (s === "on") on++; else if (s === "lost") lost++; });
+      return { on: on, lost: lost };
+    }
+    // massimo raggiunto negli anni fino a quello scelto
+    function peakBefore(md, yr) {
+      var best = { yr: first, on: -1 };
+      years.forEach(function (y) { if (y <= yr) { var s = stats(md, y); if (s.on > best.on) best = { yr: y, on: s.on }; } });
+      return best;
+    }
+
+    // ---- Titolo calcolato dai dati (vista Monopattini, ultimo anno) ----
+    var sLast = stats("monopattini", last);
+    var NUM = ["zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci", "undici", "dodici", "tredici", "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove", "venti"];
+    var nw = NUM[sLast.lost] || fmt(sLast.lost, 0);
+    d3.select("#title").text(nw.charAt(0).toUpperCase() + nw.slice(1) + " capoluoghi hanno già perso il monopattino in sharing");
+
+    // ---- Controlli ----
+    var yi = years.length - 1;
+    var slider = document.getElementById("year");
+    slider.max = years.length - 1;
+    slider.value = yi;
+    var ticks = d3.select("#ticks").selectAll("span").data(years).join("span").text(function (y) { return y; })
+      .style("left", function (y, i) { return "calc(13px + " + i + " * (100% - 26px) / " + (years.length - 1) + ")"; })
+      .on("click", function (ev, y) { stop(); setYear(years.indexOf(y)); });
+
+    var host = document.getElementById("map");
+    var tip = R.tooltip(host);
+    var active = null;
+    R.dismissOutside(host, function () { tip.hide(); active = null; dim(); });
+
+    var svg, gPts, proj, rScale = {}, W = 0, played = false;
+    function radius(md) {
+      var k10 = MODES[md].k10;
+      var max = d3.max(cities, function (c) { return d3.max(years, function (y) { return c.y[y][k10] || 0; }); });
+      var narrow = R.isNarrow(W);
+      return d3.scaleSqrt().domain([0, max]).range([0, narrow ? 11 : 15]);
+    }
+    function attrs(c) {
+      var yr = years[yi], s = state(c, mode, yr), v = c.y[yr][MODES[mode].k10] || 0;
+      var narrow = R.isNarrow(W);
+      if (s === "on") return { s: s, r: Math.max(narrow ? 2.6 : 3, rScale[mode](v)), fill: "var(--blue)", stroke: "var(--bg)", sw: 0.8, op: 0.88 };
+      if (s === "lost") return { s: s, r: narrow ? 4 : 5, fill: "none", stroke: "var(--red)", sw: narrow ? 1.6 : 1.8, op: 1 };
+      return { s: s, r: narrow ? 1.6 : 2, fill: "var(--grey-4)", stroke: "none", sw: 0, op: 1 };
+    }
+    function order(a, b) {
+      var A = attrs(a), B = attrs(b), rank = { never: 0, lost: 1, on: 2 };
+      return rank[A.s] - rank[B.s] || B.r - A.r;
+    }
+
+    function draw(width, phase) {
+      W = width;
+      var narrow = R.isNarrow(W);
+      var H = Math.round(Math.min(W * (narrow ? 1.22 : 1.12), 640));
+      proj = d3.geoConicConformal().parallels([38, 46]).rotate([-12.5, 0]).center([0, 42])
+        .fitExtent([[narrow ? 4 : 20, 6], [W - (narrow ? 4 : 20), H - 6]], regioni);
+      var path = d3.geoPath(proj);
+      rScale.monopattini = radius("monopattini"); rScale.bici = radius("bici");
+      cities.forEach(function (c) { var p = proj([c.lon, c.lat]); c.x = p[0]; c.yy = p[1]; });
+
+      d3.select(host).select("svg").remove();
+      svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img");
+      svg.append("title").text("Mappa dei Comuni capoluogo con servizi di sharing");
+      svg.append("g").selectAll("path").data(regioni.features).join("path").attr("class", "reg").attr("d", path);
+      gPts = svg.append("g");
+      var hit = svg.append("rect").attr("width", W).attr("height", H).style("fill", "transparent");
+      var delaunay = d3.Delaunay.from(cities, function (c) { return c.x; }, function (c) { return c.yy; });
+      function pick(ev) {
+        var p = d3.pointer(ev, svg.node());
+        var c = cities[delaunay.find(p[0], p[1])];
+        var d = Math.hypot(c.x - p[0], c.yy - p[1]);
+        return d < Math.max(18, attrs(c).r + 8) ? c : null;
+      }
+      hit.on("pointermove pointerdown", function (ev) {
+        var c = pick(ev);
+        if (!c) { if (ev.type === "pointerdown") { tip.hide(); active = null; dim(); } return; }
+        active = c; showTip(c); dim();
+      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); active = null; dim(); } });
+
+      update(phase === "static" ? 0 : null, phase);
+    }
+
+    function dim() {
+      if (!gPts) return;
+      gPts.selectAll("circle").classed("is-dimmed", function (c) { return active && c !== active; });
+    }
+    function showTip(c) {
+      var yr = years[yi], md = MODES[mode], s = state(c, mode, yr), v = c.y[yr][md.k10];
+      var rows = [["Servizio", s === "on" ? "attivo" : s === "lost" ? "chiuso" : "mai attivo"]];
+      if (s === "on") rows.push(["Mezzi per 10.000 ab.", fmt(v, 1)]);
+      if (s === "lost") {
+        var lastOn = null; for (var y = first; y < yr; y++) if (c.y[y][md.k]) lastOn = y;
+        rows.push(["Ultimo anno attivo", String(lastOn)]);
+      }
+      tip.show(R.tipHTML({ title: c.name + ", " + yr, rows: rows, note: md.tip }), c.x, c.yy);
+    }
+
+    function update(dur, phase) {
+      if (!gPts) return;
+      var yr = years[yi];
+      var t = dur == null ? 350 : dur;
+      if (R.reduced) t = 0;
+      var sorted = cities.slice().sort(order);
+      var sel = gPts.selectAll("circle").data(sorted, function (c) { return c.name; });
+      var enter = sel.enter().append("circle").attr("class", "pt")
+        .attr("cx", function (c) { return c.x; }).attr("cy", function (c) { return c.yy; }).attr("r", 0);
+      var all = enter.merge(sel).order();
+      if (phase === "pre") { all.attr("r", 0); }
+      else {
+        all.transition().duration(phase === "play" ? R.DUR : t).ease(d3.easeCubicOut)
+          .delay(function (c) { return phase === "play" ? (c.yy / 600) * 300 : 0; })
+          .attr("cx", function (c) { return c.x; }).attr("cy", function (c) { return c.yy; })
+          .attr("r", function (c) { return attrs(c).r; })
+          .style("fill", function (c) { return attrs(c).fill; })
+          .style("stroke", function (c) { return attrs(c).stroke; })
+          .style("stroke-width", function (c) { return attrs(c).sw; })
+          .style("fill-opacity", function (c) { return attrs(c).op; });
+      }
+      // contatore
+      var s = stats(mode, yr), pk = peakBefore(mode, yr), md = MODES[mode];
+      var html = '<span>Capoluoghi con ' + md.what + ': <b>' + s.on + '</b>' +
+        (s.on < pk.on ? ' <span class="down">(−' + (pk.on - s.on) + ' rispetto al ' + pk.yr + ')</span>' : "") + '</span>';
+      if (s.lost) html += '<span class="lost">Servizio chiuso: <b>' + s.lost + '</b></span>';
+      d3.select("#count").html(html);
+      svg.attr("aria-label", "Mappa dei 109 Comuni capoluogo, " + yr + ": " + s.on + " hanno un servizio di " + md.what +
+        (s.lost ? ", " + s.lost + " lo hanno avuto in un anno precedente e lo hanno perso" : "") + ".");
+      ticks.classed("on", function (y) { return y === yr; });
+      slider.value = yi;
+      slider.setAttribute("aria-valuetext", String(yr));
+      if (active) showTip(active);
+    }
+    function setYear(i) { yi = i; update(); }
+
+    // ---- Play ----
+    var timer = null;
+    var ico = document.getElementById("play-ico");
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+      ico.innerHTML = '<path d="M2 1l11 6-11 6z"/>';
+      document.getElementById("play").setAttribute("aria-label", "Scorri gli anni");
+    }
+    document.getElementById("play").addEventListener("click", function () {
+      if (timer) { stop(); return; }
+      ico.innerHTML = '<path d="M2 1h3.5v12H2zM8.5 1H12v12H8.5z"/>';
+      this.setAttribute("aria-label", "Ferma");
+      if (yi === years.length - 1) setYear(0);
+      timer = setInterval(function () {
+        if (yi >= years.length - 1) { stop(); return; }
+        setYear(yi + 1);
+        if (yi >= years.length - 1) stop();
+      }, R.reduced ? 1400 : 1100);
+    });
+    slider.addEventListener("input", function () { stop(); setYear(+slider.value); });
+
+    d3.selectAll(".seg button").on("click", function () {
+      mode = this.getAttribute("data-mode");
+      d3.selectAll(".seg button").attr("aria-pressed", function () { return String(this.getAttribute("data-mode") === mode); });
+      update();
+    });
+
+    R.responsive(host, draw);
+  }).catch(function (e) { R.fail("#map", e); });
+})();
+</script>
+</body>
+</html>

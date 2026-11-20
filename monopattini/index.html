@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monopattini in sharing: corse, flotta e servizi – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<style>
+  .r-tip { max-width: 270px; }
+  .r-tip__row span i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .r-tip__row b small { font-weight: 500; color: var(--ink-2); }
+  .ref-100 { stroke: var(--ink-2); stroke-width: 1; shape-rendering: crispEdges; }
+  .sw-line { display: inline-block; width: 22px; height: 0; border-top: 2px dashed var(--ink-2); }
+  .sw-hollow { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.75px solid var(--ink-2); background: var(--bg); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="../assets/radar.js"></script>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Più corse in monopattino, con meno mezzi e meno servizi</h1>
+    <p class="r-sub">Monopattini in sharing in Italia, numero indice 2022 = 100. Nel tooltip i valori assoluti</p>
+  </header>
+
+  <div class="r-big" id="big" aria-hidden="true">
+    <span class="r-big__num" id="big-num">&nbsp;</span>
+    <span class="r-big__label" id="big-label"></span>
+  </div>
+
+  <figure class="r-chart" id="chart" style="margin-top:20px"></figure>
+  <div class="r-key"><span><i class="sw-line"></i><i class="sw-hollow"></i>2025: stima sul primo quadrimestre</span></div>
+  <p class="r-note" id="note"></p>
+
+  <footer class="r-foot">
+    <span>Fonte: Osservatorio nazionale sharing mobility, 9° Rapporto nazionale sulla sharing mobility (ottobre 2025)</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var BASE = 2022;
+  var SERIES = [
+    { k: "noleggi", label: "Noleggi", color: "var(--red)", f: function (v) { return fmt(v / 1e6, 1) + " mln"; } },
+    { k: "flotta", label: "Flotta", color: "var(--blue)", f: function (v) { return fmt(v, 0) + " mezzi"; } },
+    { k: "servizi", label: "Servizi", color: "var(--grey)", f: function (v) { return fmt(v, 0); } }
+  ];
+  function sign(v, dec) { return (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v), dec == null ? 1 : dec) + "%"; }
+
+  R.loadCSV("../data/monopattini.csv").then(function (rows) {
+    var all = rows.map(function (r) {
+      return { anno: +r.anno, date: new Date(+r.anno, 0, 1), noleggi: R.num(r.noleggi), flotta: R.num(r.flotta), servizi: R.num(r.servizi), approx: /^s/i.test(r.approssimato || ""), nota: r.nota };
+    }).sort(function (a, b) { return a.anno - b.anno; });
+    var byYear = {}; all.forEach(function (d) { byYear[d.anno] = d; });
+    var base = byYear[BASE];
+    var data = all.filter(function (d) { return d.anno >= BASE; });
+    var last = data[data.length - 1];
+    var ESTIMATE = last.anno;                       // l'ultimo anno è la stima sul primo quadrimestre
+    var prevLast = data[data.length - 2];
+
+    // serie in numero indice
+    SERIES.forEach(function (s) {
+      s.pts = data.map(function (d) { return { s: s, d: d, date: d.date, v: d[s.k], idx: d[s.k] / base[s.k] * 100 }; });
+      s.last = s.pts[s.pts.length - 1];
+    });
+
+    // ---- Big number (dal CSV) ----
+    var gN = last.noleggi / base.noleggi - 1;
+    var gF = last.flotta / base.flotta - 1;
+    var bigNum = d3.select("#big-num");
+    var bigFmt = function (v) { return (v >= 0 ? "+" : "−") + fmt(Math.abs(v), 0) + "%"; };
+    d3.select("#big-label").text("le corse stimate nel " + last.anno + " rispetto al " + BASE +
+      ", mentre la flotta è scesa del " + fmt(Math.abs(gF * 100), 0) + "%");
+    if (R.reduced) bigNum.text(bigFmt(gN * 100));
+    else { bigNum.text(bigFmt(0)); R.onFirstView(document.getElementById("big"), function () { R.countUp(bigNum, gN * 100, bigFmt, "play"); }); }
+
+    d3.select("#note").text("Il valore " + BASE + " dei noleggi, base dell'indice, è letto dal grafico del Rapporto ed è approssimato. " +
+      "Per il " + last.anno + " i noleggi sono una stima annua dell'Osservatorio costruita sul primo quadrimestre; flotta e servizi sono il dato del primo quadrimestre.");
+
+    var host = document.getElementById("chart");
+    var tip = R.tooltip(host);
+    var clearActive = function () {};
+    R.dismissOutside(host, function () { tip.hide(); clearActive(); });
+
+    R.responsive(host, function (W, phase) {
+      var narrow = R.isNarrow(W);
+      var m = { top: 14, right: narrow ? 74 : 96, bottom: 30, left: 30 };
+      var H = narrow ? 320 : 380;
+      var w = W - m.left - m.right, h = H - m.top - m.bottom;
+
+      var x = d3.scaleTime().domain([new Date(BASE, 0, 1), last.date]).range([0, w]);
+      var lo = d3.min(SERIES, function (s) { return d3.min(s.pts, function (p) { return p.idx; }); });
+      var hi = d3.max(SERIES, function (s) { return d3.max(s.pts, function (p) { return p.idx; }); });
+      var y = d3.scaleLinear().domain([Math.min(40, Math.floor(lo / 20) * 20 - 10), Math.ceil(hi / 20) * 20]).range([h, 0]);
+      var ticks = y.ticks(narrow ? 4 : 5).filter(function (t) { return t >= y.domain()[0]; });
+
+      d3.select(host).select("svg").remove();
+      var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+        .attr("aria-label", "Grafico a linee in numero indice, " + BASE + " uguale a 100: nel " + last.anno + " i noleggi di monopattini in sharing stimati salgono a " +
+          fmt(SERIES[0].last.idx, 0) + ", la flotta scende a " + fmt(SERIES[1].last.idx, 0) + " e i servizi attivi nei Comuni a " + fmt(SERIES[2].last.idx, 0) + ".");
+      svg.append("title").text("Monopattini in sharing in Italia: noleggi, flotta e servizi, numero indice " + BASE + " = 100");
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+      // griglia
+      var grid = g.append("g").attr("class", "grid");
+      grid.selectAll("line").data(ticks).join("line")
+        .attr("x1", -m.left).attr("x2", w)
+        .attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; })
+        .attr("class", function (d) { return d === 100 ? "ref-100" : null; });
+      g.append("g").selectAll("text").data(ticks).join("text").attr("class", "tick-label")
+        .attr("x", -m.left).attr("y", function (d) { return y(d) - 5; })
+        .style("fill", function (d) { return d === 100 ? "var(--ink)" : null; })
+        .text(function (d) { return fmt(d, 0); });
+
+      // asse X: anni veri
+      var xa = g.append("g").attr("transform", "translate(0," + h + ")");
+      xa.selectAll("line").data(data).join("line")
+        .attr("x1", function (d) { return Math.round(x(d.date)) + 0.5; }).attr("x2", function (d) { return Math.round(x(d.date)) + 0.5; })
+        .attr("y1", 0).attr("y2", 5).style("stroke", "var(--ink-2)");
+      xa.selectAll("text").data(data).join("text").attr("class", "tick-label")
+        .attr("x", function (d) { return x(d.date); }).attr("y", 20)
+        .attr("text-anchor", function (d, i) { return i === 0 ? "start" : i === data.length - 1 ? "end" : "middle"; })
+        .text(function (d) { return d.anno === ESTIMATE ? d.anno + "*" : d.anno; });
+
+      // clip: tratto pieno fino al penultimo anno, tratteggiato sull'ultimo
+      var cut = x(prevLast.date);
+      var uid = "c" + Math.random().toString(36).slice(2, 7);
+      var defs = svg.append("defs");
+      defs.append("clipPath").attr("id", uid + "a").append("rect").attr("x", -10).attr("y", -m.top).attr("width", cut + 10).attr("height", H);
+      defs.append("clipPath").attr("id", uid + "b").append("rect").attr("x", cut).attr("y", -m.top).attr("width", w - cut + 20).attr("height", H);
+
+      // annotazione (una sola): servizi 2023
+      var aPt = SERIES[2].pts.find(function (p) { return p.d.anno === 2023; });
+      var an = g.append("g").attr("class", "anno");
+      var ax = x(aPt.date), ay = y(aPt.idx);
+      var tx = 0, tw = narrow ? Math.min(w - 40, 190) : Math.min(260, ax + 40);
+      var ty = h - 10;                               // ultima riga appena sopra l'asse
+      var at = an.append("text").attr("x", tx).attr("y", ty)
+        .text("Dal 2023 i bandi di Roma e Milano riducono il numero di operatori ammessi").call(R.wrap, tw);
+      var nl = +at.attr("data-lines") || 1;
+      var fs = 13 * 1.35;
+      at.attr("transform", "translate(0," + (-(nl - 1) * fs) + ")");
+      var top = ty - (nl - 1) * fs - fs + 2;
+      // il testo sta sotto le linee: la linea d'aggancio sale dal testo al punto
+      an.append("path").attr("d", "M" + ax + "," + top + "V" + (ay + 4));
+      an.append("circle").attr("cx", ax).attr("cy", ay).attr("r", 1.75);
+      R.enter(an, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.7);
+
+      var line = d3.line().curve(d3.curveMonotoneX).x(function (p) { return x(p.date); }).y(function (p) { return y(p.idx); });
+      var marks = [];
+      SERIES.slice().reverse().forEach(function (s) {
+        var gs = g.append("g").attr("class", "mark series");
+        gs.datum(s);
+        var solid = gs.append("path").datum(s.pts).attr("d", line).attr("clip-path", "url(#" + uid + "a)")
+          .style("fill", "none").style("stroke", s.color).attr("stroke-width", 2.5).attr("stroke-linecap", "round").attr("stroke-linejoin", "round");
+        var dash = gs.append("path").datum(s.pts).attr("d", line).attr("clip-path", "url(#" + uid + "b)")
+          .style("fill", "none").style("stroke", s.color).attr("stroke-width", 2.5).attr("stroke-dasharray", "4 4");
+        // disegno: la linea piena si traccia, il tratteggio compare alla fine
+        var L = solid.node().getTotalLength();
+        R.enter(solid, phase,
+          function (sel) { sel.attr("stroke-dasharray", L + " " + L).attr("stroke-dashoffset", L); },
+          function (sel) { sel.attr("stroke-dashoffset", 0); });
+        R.enter(dash, phase, function (sel) { sel.style("opacity", 0); }, function (sel) { sel.style("opacity", 1); }, R.DUR * 0.85);
+        var pts = gs.append("g").selectAll("circle").data(s.pts).join("circle")
+          .attr("cx", function (p) { return x(p.date); }).attr("cy", function (p) { return y(p.idx); })
+          .attr("r", function (p) { return p.d.anno === ESTIMATE ? 4 : 3.5; })
+          .style("fill", function (p) { return p.d.anno === ESTIMATE ? "var(--bg)" : s.color; })
+          .style("stroke", function (p) { return p.d.anno === ESTIMATE ? s.color : "var(--bg)"; })
+          .attr("stroke-width", function (p) { return p.d.anno === ESTIMATE ? 2 : 1.25; });
+        pts.each(function (p) {
+          R.enter(d3.select(this), phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, (x(p.date) / w) * R.DUR);
+        });
+        s.node = gs;
+        marks.push(gs);
+      });
+
+      // etichette dirette a fine linea, con anti-collisione verticale
+      var labs = SERIES.map(function (s) { return { s: s, y: y(s.last.idx) }; }).sort(function (a, b) { return a.y - b.y; });
+      var MIN = 32;
+      for (var i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < MIN) labs[i].y = labs[i - 1].y + MIN;
+      var lg = g.append("g");
+      labs.forEach(function (l) {
+        var t = lg.append("g").attr("class", "mark series").datum(l.s).attr("transform", "translate(" + (w + 9) + "," + l.y + ")");
+        t.append("text").attr("class", "series-label").attr("dy", "-0.15em").style("fill", l.s.color === "var(--grey)" ? "var(--ink-2)" : l.s.color).text(l.s.label);
+        t.append("text").attr("class", "series-label--sub").attr("dy", "1.1em").text(fmt(l.s.last.idx, 0));
+      });
+      R.enter(lg, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", 1); }, R.DUR * 0.85);
+
+      // interazione: crosshair sull'anno più vicino, tooltip con i valori assoluti
+      var cross = g.append("line").attr("class", "crosshair").attr("y1", 0).attr("y2", h).style("opacity", 0);
+      function activate(d) {
+        var cx = x(d.date);
+        cross.attr("x1", cx).attr("x2", cx).style("opacity", 1);
+        var prev = byYear[d.anno - 1];
+        var rows = SERIES.map(function (s) {
+          var v = d[s.k], ch = prev ? (v / prev[s.k] - 1) * 100 : null;
+          return ['<i style="background:' + s.color + '"></i>' + s.label, s.f(v) + (ch == null ? "" : " <small>" + sign(ch) + "</small>")];
+        });
+        var notes = [];
+        if (d.anno === ESTIMATE) notes.push("2025: stima sul primo quadrimestre. Noleggi: stima annua dell'Osservatorio; flotta e servizi: dato del primo quadrimestre.");
+        if (d.anno === BASE) notes.push("Noleggi: valore letto dal grafico del Rapporto, approssimato.");
+        if (prev && prev.approx) notes.push("Variazione sul " + prev.anno + " calcolata su valori approssimati (" + prev.nota + ").");
+        tip.show(R.tipHTML({
+          title: d.anno === ESTIMATE ? d.anno + " (primo quadrimestre)" : String(d.anno),
+          rows: rows,
+          note: (notes.length ? notes.join(" ") + " " : "") + "Tra parentesi la variazione sull'anno precedente."
+        }), cx + m.left, y(d3.max(SERIES, function (s) { return s.pts.find(function (p) { return p.d === d; }).idx; })) + m.top);
+      }
+      clearActive = function () { cross.style("opacity", 0); };
+      function nearest(ev) {
+        var mx = d3.pointer(ev, g.node())[0];
+        return d3.least(data, function (d) { return Math.abs(x(d.date) - mx); });
+      }
+      g.append("rect").attr("class", "hit").attr("x", -10).attr("y", -m.top).attr("width", w + 20).attr("height", h + m.top)
+        .on("pointermove pointerdown", function (ev) { activate(nearest(ev)); })
+        .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); clearActive(); } });
+    });
+  }).catch(function (e) { R.fail("#chart", e); });
+})();
+</script>
+</body>
+</html>
