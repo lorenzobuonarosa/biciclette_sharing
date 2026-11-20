@@ -20,13 +20,13 @@
 <body>
 <main class="radar">
   <header>
-    <h1 class="r-title" id="title">Le bici pubbliche di Parigi e Barcellona si usano quattro volte in più rispetto ai monopattini in sharing italiani</h1>
+    <h1 class="r-title" id="title">Le bici pubbliche di Parigi e Barcellona si usano cinque volte in più rispetto a bici e monopattini in sharing in Italia</h1>
     <p class="r-sub">Corse al giorno per mezzo in sharing, 2024</p>
   </header>
 
   <figure class="r-chart" id="chart"></figure>
   <div class="r-key"><span><i class="sw sw--range"></i>Intervallo: la flotta di Barcellona varia nell'anno</span></div>
-  <p class="r-note">I sistemi non sono omogenei: bici a stazioni e mezzi a flusso libero hanno usi diversi.</p>
+  <p class="r-note"><span id="note-ita"></span> I sistemi non sono omogenei: bici a stazioni e mezzi a flusso libero hanno usi diversi.</p>
 
   <footer class="r-foot">
     <span>Fonte: Osservatorio nazionale sharing mobility (Italia); Agemob (Parigi); BSM e AMB (Barcellona); Ayuntamiento de Madrid. Elaborazione Radar – QN per Parigi, Barcellona e Madrid (noleggi annui / flotta / 366 giorni)</span>
@@ -43,6 +43,14 @@
     var data = rows.map(function (r, i) {
       return { voce: r.voce, gruppo: r.gruppo, v: R.num(r.corse_giorno), min: R.num(r.min), max: R.num(r.max), calcolo: r.calcolo, fonte: r.fonte, i: i };
     });
+    // Italia: una sola barra, media semplice dei tassi delle righe del gruppo "Italia" (non pesata sulla flotta)
+    var parts = data.filter(function (d) { return d.gruppo === "Italia"; });
+    var itaV = d3.mean(parts, function (d) { return d.v; });
+    var focus = {
+      voce: "Italia – bici e monopattini", gruppo: "Italia", v: itaV, min: null, max: null, parts: parts,
+      fonte: "Osservatorio nazionale sharing mobility, 9° Rapporto, p65 e p72", i: 999
+    };
+    data = data.filter(function (d) { return d.gruppo !== "Italia"; }).concat([focus]);
     var groups = [];
     data.forEach(function (d) { if (groups.indexOf(d.gruppo) < 0) groups.push(d.gruppo); });
     // ordine dal valore più alto dentro ogni gruppo (a parità, l'ordine del CSV)
@@ -51,17 +59,16 @@
       ordered = ordered.concat(data.filter(function (d) { return d.gruppo === gname; })
         .sort(function (a, b) { return b.v - a.v || a.i - b.i; }));
     });
-    function isIT(d) { return /^Italia/.test(d.voce); }
-    var focus = data.find(function (d) { return /^Italia/.test(d.voce) && /monopattini/i.test(d.voce); });
-    function color(d) { return d === focus ? "var(--red)" : isIT(d) ? "var(--grey-dark)" : "var(--blue)"; }
+    function color(d) { return d === focus ? "var(--red)" : "var(--blue)"; }
 
-    // controllo del titolo sui dati: Parigi e Barcellona contro i monopattini italiani
+    // titolo calcolato: Parigi e Barcellona contro la media italiana (parte intera del rapporto)
     var par = data.find(function (d) { return /^Parigi/.test(d.voce); });
     var bcn = data.find(function (d) { return /^Barcellona/.test(d.voce); });
-    var ratio = Math.min(par.v, bcn.v) / focus.v;
-    var n = Math.floor(ratio);
-    // numero calcolato: parte intera del rapporto (oggi 4,3 per Parigi, 4,4 per Barcellona)
-    d3.select("#title").text("Le bici pubbliche di Parigi e Barcellona si usano " + NUM[n] + " volte in più rispetto ai monopattini in sharing italiani");
+    var n = Math.floor(Math.min(par.v, bcn.v) / focus.v);
+    d3.select("#title").text("Le bici pubbliche di Parigi e Barcellona si usano " + NUM[n] + " volte in più rispetto a bici e monopattini in sharing in Italia");
+    d3.select("#note-ita").text("Per l'Italia media semplice dei tassi di rotazione di " +
+      (function (l) { return l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; })(parts.map(function (d) { return d.voce.replace(/^Italia – /, "") + " (" + f1(d.v) + ")"; })) +
+      ", non pesata sulla flotta.");
 
     var host = document.getElementById("chart");
     var tip = R.tooltip(host);
@@ -159,12 +166,12 @@
           ticks.classed("is-dimmed", function (q) { return q !== d; });
           vals.classed("is-dimmed", function (q) { return q !== d; });
           rlab.classed("is-dimmed", function (q) { return q !== d; });
-          var rows = [["Gruppo", d.gruppo]];
+          var rows = d.parts ? d.parts.map(function (q) { return [q.voce.replace(/^Italia – /, ""), f1(q.v)]; }) : [["Gruppo", d.gruppo]];
           if (d.min != null) rows.push(["Intervallo", f1(d.min) + "–" + f1(d.max)]);
           tip.show(R.tipHTML({
             title: d.voce, value: f1(d.v), unit: "corse al giorno per mezzo",
             rows: rows,
-            note: "Calcolo: " + d.calcolo + (/^Italia|^Berlino/.test(d.voce) ? "." : "; corse annue / flotta / 366 giorni.") +
+            note: (d.parts ? "Media semplice dei tassi di rotazione pubblicati, non pesata sulla flotta." : "Calcolo: " + d.calcolo + "; corse annue / flotta / 366 giorni.") +
               (d.min != null ? " L'intervallo dipende dalla flotta, che nel 2024 varia tra il minimo e il massimo indicati." : "") +
               "<br>Fonte: " + d.fonte
           }), Math.min(x(d.max || d.v) + m.left, W - 40), yPos.get(d) + m.top);
