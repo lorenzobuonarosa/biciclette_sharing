@@ -118,7 +118,8 @@
         .style("fill", function (q) { return q.s.color; });
       R.enter(bars, phase,
         function (s) { s.attr("d", function (q) { return segPath(q, 0); }); },
-        function (s) { s.attrTween("d", function (q) { return function (t) { return segPath(q, t); }; }); });
+        // fase "static": selezione semplice, niente attrTween
+        function (s) { if (s.attrTween) s.attrTween("d", function (q) { return function (t) { return segPath(q, t); }; }); else s.attr("d", function (q) { return segPath(q, 1); }); });
 
       // totali sopra le barre, un decimale
       var tots = g.append("g").selectAll("text").data(data).join("text")

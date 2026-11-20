@@ -130,7 +130,8 @@
       var bars = g.append("g").selectAll("path").data(ordered).join("path").attr("class", "mark").style("fill", color);
       R.enter(bars, phase,
         function (s) { s.attr("d", function (d) { return barD(d, 0); }); },
-        function (s) { s.attrTween("d", function (d) { return function (t) { return barD(d, t); }; }); });
+        // fase "static": selezione semplice, niente attrTween
+        function (s) { if (s.attrTween) s.attrTween("d", function (d) { return function (t) { return barD(d, t); }; }); else s.attr("d", function (d) { return barD(d, 1); }); });
       var rng = ordered.filter(function (d) { return d.min != null; });
       var rangeBars = g.append("g").selectAll("path").data(rng).join("path").attr("class", "mark")
         .style("fill", "var(--blue-light)")
